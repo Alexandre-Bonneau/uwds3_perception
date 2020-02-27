@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 from scipy.spatial.distance import euclidean, cosine
 from uwds3_perception.detection.opencv_dnn_detector import OpenCVDNNDetector
 from uwds3_perception.estimation.facial_features_estimator import FacialFeaturesEstimator
+from uwds3_perception.estimation.face_alignement_estimator import FaceAlignementEstimator
+from uwds3_perception.estimation.facial_landmarks_estimator import FacialLandmarksEstimator
+
+
 from uwds3_perception.detection.face_detector import FaceDetector
 from uwds3_perception.recognition.knn_assignement import KNearestNeighborsAssignement
 from uwds3_perception.recognition.knn_assignement import KNNLoader
@@ -43,6 +47,8 @@ class OpenFaceRecognition(object):
                                                300)
 
         self.detector_model_filename = detector_model_filename
+        self.a= FacialLandmarksEstimator(shape_predictor_config_filename)
+        self.face_alignement_estimator = FaceAlignementEstimator()
         self.facial_features_estimator = FacialFeaturesEstimator( face_3d_model_filename,embedding_model_file)
         #self.input_shape = input_shape
         self.detector_weights_filename = detector_weights_filename
@@ -57,8 +63,15 @@ class OpenFaceRecognition(object):
             print("no image found for extraction")
             return []
         else:
+            cv2.imshow('image',rgb_image)
+            cv2.waitKey(0)
             self.facial_features_estimator.estimate(rgb_image,face_list,self.frontalize)
             name = self.facial_features_estimator.name
+            self.a.estimate(rgb_image,face_list)
+            rgb_image2 = self.face_alignement_estimator.align(rgb_image,face_list[0])
+            cv2.imshow('image',rgb_image2)
+
+            cv2.waitKey(0)
             return face_list[0].features[name]
 
 
@@ -220,21 +233,21 @@ if __name__ == '__main__':
     #detector_model_test = "../../../models/detection/ssd_mobilenet_v2_coco_2018_03_29.pb"
     detector_config_filename = "../../../config/detection/face_config.yaml"
     face_3d_model_filename = "../../../config/estimation/face_3d_model.npy"
+    shape_predictor_config_filename= "../../../models/estimation/shape_predictor_68_face_landmarks.dat"
 else:
     detector_config_filename = "../config/detection/face_config.yaml"
     face_3d_model_filename = "../config/estimation/face_3d_model.npy"
     embedding_model_file = "../models/features/nn4.small2.v1.t7"
 
 
-
 #
-# frdl = FacialRecognitionDataLoader("../../../src/uwds3_perception/recognition/snapshots_origin",
-#  "../../../src/uwds3_perception/recognition/snapshots_origin")
-# frdl.load_dataset("../../../src/uwds3_perception/recognition/snapshots/")
-# ofd = OpenFaceRecognition(detector_model, detector_model_txt,detector_config_filename)
+frdl = FacialRecognitionDataLoader("../../../src/uwds3_perception/recognition/snapshots_origin",
+ "../../../src/uwds3_perception/recognition/snapshots_origin")
+frdl.load_dataset("../../../src/uwds3_perception/recognition/snapshots_origin/")
+ofd = OpenFaceRecognition(detector_model, detector_model_txt,detector_config_filename)
 
-#frdl.test_recognition(ofd,4,50)
-# frdl.evaluate(ofd,7)
+frdl.test_recognition(ofd,4,50)
+frdl.evaluate(ofd,7)
 # frdl.knn_init("visage",0.99)
 # frdl.knn_update(ofd)
 # frdl.knn_train()
