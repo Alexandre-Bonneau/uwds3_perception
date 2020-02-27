@@ -38,12 +38,12 @@ class HeadPoseEstimator(object):
         T = np.zeros((4, 4))
         T[3, 3] = 1.0
         euler = np.array(euler_from_matrix(R, "sxyz"))
-        euler[2] = 0
+        euler[2] *= -1
         return euler.reshape((3, 1))
 
     def __euler2rodrigues(self, rot):
         rot[2][0] = 0
-        R = euler_matrix(rot[0][0], rot[1][0], rot[2][0], "sxyz")
+        R = euler_matrix(rot[0][0], rot[1][0], -rot[2][0], "sxyz")
         rvec = cv2.Rodrigues(R[:3, :3])[0]
         return rvec
 
@@ -63,14 +63,15 @@ class HeadPoseEstimator(object):
                         success, rvec, tvec, _ = cv2.solvePnPRansac(self.model_3d, points_2d, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE, useExtrinsicGuess=True, rvec=rvec, tvec=t)
                         success = self.__check_consistency(tvec, rvec)
                     else:
-                        success, rvec, tvec = cv2.solvePnP(self.model_3d, points_2d, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
+                        success, rvec, tvec, _ = cv2.solvePnPRansac(self.model_3d, points_2d, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
                         success = self.__check_consistency(tvec, rvec)
                     if success:
                         r = self.__rodrigues2euler(rvec)
-                        print r
+                        #print r
+                        r[2] = .0
                         self.__add_offset(r, RX_OFFSET, RY_OFFSET, RZ_OFFSET)
                         sensor_pose = Vector6D(x=tvec[0][0], y=tvec[1][0], z=tvec[2][0],
                                                rx=r[0][0], ry=abs(r[1][0]), rz=r[2][0])
                         world_pose = Vector6D().from_transform(np.dot(view_matrix, sensor_pose.transform()))
-                        print world_pose.rot
+                        #print world_pose.rot
                         f.update_pose(world_pose.position(), rotation=world_pose.rotation())

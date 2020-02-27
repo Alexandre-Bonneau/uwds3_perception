@@ -53,7 +53,8 @@ class Track(SceneNode):
             self.state = TrackState.TENTATIVE
 
         self.pose = None
-        self.shape = None
+
+        self.shapes = []
 
         self.tracker = SingleObjectTracker()
 

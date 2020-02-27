@@ -70,12 +70,14 @@ class SSDDetector(object):
             filtered_dets = self.non_max_suppression(np.array(dets), self.max_overlap_ratio)
             for d in filtered_dets:
                 if depth_image is not None:
-                    x = d[2] - d[0]
-                    y = d[3] - d[1]
+                    w = d[2] - d[0]
+                    h = d[3] - d[1]
+                    x = d[0] + w/2.0
+                    y = d[1] + h/2.0
                     x = depth_image.shape[1]-1 if x > depth_image.shape[1] else x
                     y = depth_image.shape[0]-1 if y > depth_image.shape[0] else y
-                    depth = depth_image[y][x]
-                    if math.isnan(depth):
+                    depth = depth_image[int(y)][int(x)]/1000.0
+                    if math.isnan(depth) or depth == 0.0:
                         depth = None
                 else:
                     depth = None

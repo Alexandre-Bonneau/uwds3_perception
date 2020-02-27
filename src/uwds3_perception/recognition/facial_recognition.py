@@ -2,40 +2,33 @@ import os
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-from scipy.spatial.distance import euclidean, cosine
+from scipy.spatial.distance import euclidean
 from uwds3_perception.detection.opencv_dnn_detector import OpenCVDNNDetector
 from uwds3_perception.estimation.facial_features_estimator import FacialFeaturesEstimator
+<<<<<<< HEAD
 from uwds3_perception.estimation.face_alignement_estimator import FaceAlignementEstimator
 from uwds3_perception.estimation.facial_landmarks_estimator import FacialLandmarksEstimator
 
 
 from uwds3_perception.detection.face_detector import FaceDetector
+=======
+>>>>>>> 51d96c820bc262865351d2d94026e895c018d71e
 from uwds3_perception.recognition.knn_assignement import KNearestNeighborsAssignement
 from uwds3_perception.recognition.knn_assignement import KNNLoader
-from pyuwds3.types.features import Features
 import numpy.random as rng
-import time
-from keras.models import Sequential, Model
-from keras.layers import Dense, Input, Conv2D, MaxPooling2D, Flatten, Lambda
-from keras.regularizers import l2
-from keras.optimizers import Adam
-from sklearn.utils import shuffle
-from keras import backend as K
-import pickle
+
 
 class FacialRecognition(object):
     def __init__(self, knn_model_filename):
         loader = KNNLoader()
-        self.knn = loader.load(knn_name)
+        self.knn = loader.load(knn_model_filename)
     def recognize(self, face_tracks):
         for track in face_tracks:
-            _,track.description,_ = self.knn.predict(track.features["facial_description"].to_array())
-
+            _, track.description, _ = self.knn.predict(track.features["facial_description"].to_array())
 
 
 class OpenFaceRecognition(object):
     def __init__(self,
-                 #input_shape,
                  detector_model_filename,
                  detector_weights_filename,
                  detector_config_filename,
@@ -56,8 +49,6 @@ class OpenFaceRecognition(object):
         self.metric_distance = metric_distance
 
     def extract(self, rgb_image):
-        # print rgb_image.shape
-
         face_list = self.face_detector.detect(rgb_image)
         if len(face_list) == 0:
             print("no image found for extraction")
@@ -74,13 +65,11 @@ class OpenFaceRecognition(object):
             cv2.waitKey(0)
             return face_list[0].features[name]
 
-
     def predict(self, rgb_image_1, rgb_image_2):
         feature1 = self.extract(rgb_image_1)
         feature2 = self.extract(rgb_image_2)
-        return(1- self.metric_distance(feature1.to_array(),
-                                    feature2.to_array()))
-
+        return(1 - self.metric_distance(feature1.to_array(),
+                                        feature2.to_array()))
 
 
 class FacialRecognitionDataLoader(object):
@@ -116,11 +105,8 @@ class FacialRecognitionDataLoader(object):
                 print("Exception occured: {}".format(e))
             n += 1
 
-
         X_data = np.stack(X_data)
         Y_data = np.vstack(Y_data)
-        # print(X_data.shape)
-        # print(Y_data.shape)
         return X_data, Y_data, individual_dict
 
     def test_recognition(self, model, N_way, trials, mode="val", verbose=True):
@@ -131,8 +117,7 @@ class FacialRecognitionDataLoader(object):
         if verbose:
             print("Evaluating model {} on {} random  way recognition tasks...".format(trials, N_way))
         for i in range(trials):
-            # print( "{} / {} trial".format(i,trials) )
-            true_person,support_set, targets = self.make_recognition_task(N_way, mode=mode)
+            true_person, support_set, targets = self.make_recognition_task(N_way, mode=mode)
             probs = []
             for i in support_set:
                 probs.append(model.predict(true_person,i))
@@ -190,37 +175,36 @@ class FacialRecognitionDataLoader(object):
         targets, support_set = shuffle(targets, support_set)
         return X[true_person][ex1], support_set, targets
 
-    def knn_init(self,feature_name, max_distance ,data_directory="", n_neighbors=1, algorithm="ball_tree", weights="distance"):
+    def knn_init(self, feature_name, max_distance, data_directory="", n_neighbors=1, algorithm="ball_tree", weights="distance"):
         self.knn = KNearestNeighborsAssignement(feature_name, max_distance,data_directory, n_neighbors, algorithm, weights )
 
-    def knn_update(self,model):
+    def knn_update(self, model):
         X = self.X_train.copy()
-        x,y,w,h,n = X.shape
-        X=X.reshape(x*y,w,h,n)
+        x, y, w, h, n = X.shape
+        X = X.reshape(x*y, w, h, n)
         Y = self.Y_train
         persons_list = self.train_classes
-        for (image,person_id) in zip(X,Y):
-            image_feature = model.extract(image).to_array(  )
-            self.knn.update(image_feature,persons_list[person_id[0]])
+        for (image, person_id) in zip(X, Y):
+            image_feature = model.extract(image).to_array()
+            self.knn.update(image_feature, persons_list[person_id[0]])
+
     def knn_train(self):
         self.knn.train()
 
-
-
     def knn_validation(self, model):
         X = self.X_val.copy()
-        x,y,w,h,n = X.shape
-        X=X.reshape(x*y,w,h,n)
+        x, y, w, h, n = X.shape
+        X = X.reshape(x*y, w, h, n)
         Y = self.Y_val
         persons_list = self.val_classes
         count = 0
-        for (image,person_id) in zip(X,Y):
-            image_feature = model.extract(image).to_array(  )
+        for (image, person_id) in zip(X, Y):
+            image_feature = model.extract(image).to_array()
             bool, value, distance = self.knn.predict(image_feature)
             if value == persons_list[person_id[0]]:
                 count +=1
         accuracy = count / (1.0 * len(X))
-        print("The accuracy is "+ str(accuracy))
+        print("The accuracy is "+str(accuracy))
         return accuracy
 
 

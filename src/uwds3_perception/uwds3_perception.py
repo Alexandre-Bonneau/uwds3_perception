@@ -212,7 +212,7 @@ class Uwds3Perception(object):
                 self.facial_landmarks_estimator.estimate(rgb_image, face_tracks)
 
                 self.head_pose_estimator.estimate(face_tracks, view_matrix, self.camera_matrix, self.dist_coeffs)
-                self.object_pose_estimator.estimate(object_tracks, view_matrix, self.camera_matrix, self.dist_coeffs)
+                self.object_pose_estimator.estimate(object_tracks + person_tracks, view_matrix, self.camera_matrix, self.dist_coeffs)
 
                 self.shape_estimator.estimate(rgb_image, tracks, self.camera_matrix, self.dist_coeffs)
 
@@ -235,9 +235,11 @@ class Uwds3Perception(object):
 
                 scene_changes = SceneChangesStamped()
                 scene_changes.world = "tracks"
-                scene_changes.header = bgr_image_msg.header
 
                 header = bgr_image_msg.header
+                header.frame_id = self.global_frame_id
+                scene_changes.header = header
+
                 for track in tracks:
                     if self.publish_visualization_image is True:
                         track.draw(viz_frame, (230, 0, 120, 125), 1, view_matrix, self.camera_matrix, self.dist_coeffs)
@@ -250,6 +252,7 @@ class Uwds3Perception(object):
                 if self.publish_visualization_image is True:
                     viz_img_msg = self.bridge.cv2_to_imgmsg(viz_frame)
                     self.visualization_publisher.publish(viz_img_msg)
+
                 self.tracks_publisher.publish(scene_changes)
 
     def publish_tf_pose(self, pose_stamped, source_frame, target_frame):
