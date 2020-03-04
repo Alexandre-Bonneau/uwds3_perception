@@ -10,6 +10,7 @@ from cv_bridge import CvBridge
 import tf2_ros
 from tf2_ros import Buffer, TransformListener, TransformBroadcaster
 from .detection.ssd_detector import SSDDetector
+from .detection.foreground_detector import ForegroundDetector
 from .tracking.multi_object_tracker import MultiObjectTracker, iou_cost, color_cost, centroid_cost
 from .estimation.head_pose_estimator import HeadPoseEstimator
 from .estimation.object_pose_estimator import ObjectPoseEstimator
@@ -21,7 +22,7 @@ from .estimation.color_features_estimator import ColorFeaturesEstimator
 from pyuwds3.types.vector.vector6d import Vector6D
 
 
-class Uwds3Perception(object):
+class TabletopPerception(object):
     def __init__(self):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer)
@@ -38,10 +39,12 @@ class Uwds3Perception(object):
 
         self.bridge = CvBridge()
 
-        rospy.loginfo("[perception] Subscribing to '/{}' topic...".format(self.depth_camera_info_topic))
+        rospy.loginfo("[tabletop_perception] Subscribing to '/{}' topic...".format(self.depth_camera_info_topic))
         self.camera_info = None
         self.camera_frame_id = None
-        self.camera_info_subscriber = rospy.Subscriber(self.depth_camera_info_topic, CameraInfo, self.camera_info_callback)
+        self.camera_info_subscriber = rospy.Subscriber(self.rgb_camera_info_topic,
+                                                       CameraInfo,
+                                                       self.camera_info_callback)
 
         detector_model_filename = rospy.get_param("~detector_model_filename", "")
         detector_weights_filename = rospy.get_param("~detector_weights_filename", "")
@@ -60,13 +63,15 @@ class Uwds3Perception(object):
                                          face_detector_weights_filename,
                                          face_detector_config_filename,
                                          300)
+
+        self.foreground_detector = ForegroundDetector(interactive_mode=False)
+
         shape_predictor_config_filename = rospy.get_param("~shape_predictor_config_filename", "")
         self.facial_landmarks_estimator = FacialLandmarksEstimator(shape_predictor_config_filename)
         face_3d_model_filename = rospy.get_param("~face_3d_model_filename", "")
         self.head_pose_estimator = HeadPoseEstimator(face_3d_model_filename)
 
         facial_features_model_filename = rospy.get_param("~facial_features_model_filename", "")
-
         self.facial_features_estimator = FacialFeaturesEstimator(face_3d_model_filename, facial_features_model_filename)
 
         self.color_features_estimator = ColorFeaturesEstimator()
@@ -74,12 +79,8 @@ class Uwds3Perception(object):
         self.n_frame = rospy.get_param("~n_frame", 4)
         self.frame_count = 0
 
-        self.use_depth = rospy.get_param("~use_depth", False)
-
         self.publish_tf = rospy.get_param("~publish_tf", True)
         self.publish_visualization_image = rospy.get_param("~publish_visualization_image", True)
-
-        self.shape_predictor_config_filename = rospy.get_param("~shape_predictor_config_filename", "")
 
         self.n_init = rospy.get_param("~n_init", 1)
         self.max_iou_distance = rospy.get_param("~max_iou_distance", 0.8)
@@ -91,11 +92,12 @@ class Uwds3Perception(object):
 
         self.object_tracker = MultiObjectTracker(iou_cost,
                                                  color_cost,
-                                                 self.max_iou_distance,
+                                                 0.7,
                                                  self.max_color_distance,
-                                                 self.n_init,
-                                                 self.max_disappeared,
-                                                 self.max_age)
+                                                 10,
+                                                 5,
+                                                 self.max_age,
+                                                 use_appearance_tracker=True)
 
         self.face_tracker = MultiObjectTracker(iou_cost,
                                                centroid_cost,
@@ -103,7 +105,8 @@ class Uwds3Perception(object):
                                                None,
                                                self.n_init,
                                                self.max_disappeared,
-                                               self.max_age)
+                                               self.max_age,
+                                               use_appearance_tracker=False)
 
         self.person_tracker = MultiObjectTracker(iou_cost,
                                                  color_cost,
@@ -111,31 +114,37 @@ class Uwds3Perception(object):
                                                  self.max_color_distance,
                                                  self.n_init,
                                                  self.max_disappeared,
-                                                 self.max_age)
+                                                 self.max_age,
+                                                 use_appearance_tracker=False)
 
         self.shape_estimator = ShapeEstimator()
 
         self.object_pose_estimator = ObjectPoseEstimator()
 
-        self.tracks_publisher = rospy.Publisher("tracks", SceneChangesStamped, queue_size=1)
+        self.tracks_publisher = rospy.Publisher("tracks",
+                                                SceneChangesStamped,
+                                                queue_size=1)
 
-        self.visualization_publisher = rospy.Publisher("tracks_image", Image, queue_size=1)
+        self.visualization_publisher = rospy.Publisher("tracks_image",
+                                                       Image,
+                                                       queue_size=1)
 
+        self.use_depth = rospy.get_param("~use_depth", False)
         if self.use_depth is True:
-            rospy.loginfo("[perception] Subscribing to '/{}' topic...".format(self.rgb_image_topic))
+            rospy.loginfo("[tabletop_perception] Subscribing to '/{}' topic...".format(self.rgb_image_topic))
             self.rgb_image_sub = message_filters.Subscriber(self.rgb_image_topic, Image)
-            rospy.loginfo("[perception] Subscribing to '/{}' topic...".format(self.depth_image_topic))
+            rospy.loginfo("[tabletop_perception] Subscribing to '/{}' topic...".format(self.depth_image_topic))
             self.depth_image_sub = message_filters.Subscriber(self.depth_image_topic, Image)
 
-            self.sync = message_filters.ApproximateTimeSynchronizer([self.rgb_image_sub, self.depth_image_sub], 10, 0.1, allow_headerless=True)
+            self.sync = message_filters.ApproximateTimeSynchronizer([self.rgb_image_sub, self.depth_image_sub], 10, 0.2, allow_headerless=True)
             self.sync.registerCallback(self.observation_callback)
         else:
-            rospy.loginfo("[perception] Subscribing to '/{}' topic...".format(self.rgb_image_topic))
+            rospy.loginfo("[tabletop_perception] Subscribing to '/{}' topic...".format(self.rgb_image_topic))
             self.rgb_image_sub = rospy.Subscriber(self.rgb_image_topic, Image, self.observation_callback, queue_size=1)
 
     def camera_info_callback(self, msg):
         if self.camera_info is None:
-            rospy.loginfo("[perception] Camera info received !")
+            rospy.loginfo("[tabletop_perception] Camera info received !")
         self.camera_info = msg
         self.camera_frame_id = msg.header.frame_id
         self.camera_matrix = np.array(msg.K).reshape((3, 3))
@@ -158,7 +167,7 @@ class Uwds3Perception(object):
             success, view_pose = self.get_pose_from_tf2(self.global_frame_id, self.camera_frame_id)
 
             if success is not True:
-                rospy.logwarn("[perception] The camera sensor is not localized in world space (frame '{}'), please check if the sensor frame is published in /tf".format(self.global_frame_id))
+                rospy.logwarn("[tabletop_perception] The camera sensor is not localized in world space (frame '{}'), please check if the sensor frame is published in /tf".format(self.global_frame_id))
             else:
                 view_matrix = view_pose.transform()
 
@@ -170,6 +179,8 @@ class Uwds3Perception(object):
                 detections = []
                 if self.frame_count == 0:
                     detections = self.detector.detect(rgb_image, depth_image=depth_image)
+                    object_detections = self.foreground_detector.detect(rgb_image, depth_image=depth_image, prior_detections=detections)
+                    detections += object_detections
                 elif self.frame_count == 1:
                     detections = self.face_detector.detect(rgb_image, depth_image=depth_image)
                 else:
@@ -223,6 +234,7 @@ class Uwds3Perception(object):
                 ######################################################
                 # Visualization of debug image
                 ######################################################
+
                 perception_fps = cv2.getTickFrequency() / (cv2.getTickCount() - perception_timer)
 
                 cv2.rectangle(viz_frame, (0, 0), (250, 40), (200, 200, 200), -1)
@@ -252,15 +264,6 @@ class Uwds3Perception(object):
 
                 self.tracks_publisher.publish(scene_changes)
 
-    def publish_tf_pose(self, pose_stamped, source_frame, target_frame):
-        transform = TransformStamped()
-        transform.child_frame_id = target_frame
-        transform.header.frame_id = source_frame
-        transform.header.stamp = pose_stamped.header.stamp
-        transform.transform.translation = pose_stamped.pose.pose.position
-        transform.transform.rotation = pose_stamped.pose.pose.orientation
-        self.tf_broadcaster.sendTransform(transform)
-
     def get_pose_from_tf2(self, source_frame, target_frame, time=None):
         try:
             if time is not None:
@@ -280,3 +283,12 @@ class Uwds3Perception(object):
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
             rospy.logwarn("[perception] Exception occured: {}".format(e))
             return False, None
+
+    def publish_tf_pose(self, pose_stamped, source_frame, target_frame):
+        transform = TransformStamped()
+        transform.child_frame_id = target_frame
+        transform.header.frame_id = source_frame
+        transform.header.stamp = pose_stamped.header.stamp
+        transform.transform.translation = pose_stamped.pose.pose.position
+        transform.transform.rotation = pose_stamped.pose.pose.orientation
+        self.tf_broadcaster.sendTransform(transform)

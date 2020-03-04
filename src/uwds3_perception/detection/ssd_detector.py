@@ -99,11 +99,11 @@ class SSDDetector(object):
         y1 = boxes[:, 1]
         x2 = boxes[:, 2]
         y2 = boxes[:, 3]
-        scores = boxes[:, 4]
+        #scores = boxes[:, 4]
 
         area = (x2 - x1 + 1) * (y2 - y1 + 1)
 
-        idxs = np.argsort(scores)
+        idxs = np.argsort(area)
 
         while len(idxs) > 0:
             last = len(idxs) - 1

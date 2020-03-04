@@ -13,29 +13,33 @@ class ShapeEstimator(object):
     def estimate(self, rgb_image, objects_tracks, camera_matrix, dist_coeffs):
         """ """
         for o in objects_tracks:
-            if o.bbox.depth is not None:
-                if o.label != "person":
-                    if not o.has_shape():
-                        shape = o.bbox.cylinder(camera_matrix, dist_coeffs)
-                        if o.label == "face":
-                            shape = Sphere(shape.width()*2.0)
-                        shape.pose.pos.x = .0
-                        shape.pose.pos.y = .0
-                        shape.pose.pos.z = .0
-                        shape.color = self.__compute_dominant_color(rgb_image, o.bbox)
-                        o.shapes.append(shape)
-                else:
-                    shape = o.bbox.cylinder(camera_matrix, dist_coeffs)
-                    shape.pose.pos.x = .0
-                    shape.pose.pos.y = .0
-                    shape.pose.pos.z = .0
-                    if not o.has_shape():
-                        shape.color = self.__compute_dominant_color(rgb_image, o.bbox)
-                        shape.w = 0.60
-                        o.shapes.append(shape)
-                    else:
-                        o.shapes[0].w = 0.60
-                        o.shapes[0].h = shape.h
+            try:
+                if o.is_confirmed() and o.bbox.height() > 0:
+                    if o.bbox.depth is not None:
+                        if o.label != "person":
+                            if not o.has_shape():
+                                shape = o.bbox.cylinder(camera_matrix, dist_coeffs)
+                                if o.label == "face":
+                                    shape = Sphere(shape.width()*2.0)
+                                shape.pose.pos.x = .0
+                                shape.pose.pos.y = .0
+                                shape.pose.pos.z = .0
+                                shape.color = self.__compute_dominant_color(rgb_image, o.bbox)
+                                o.shapes.append(shape)
+                        else:
+                            shape = o.bbox.cylinder(camera_matrix, dist_coeffs)
+                            shape.pose.pos.x = .0
+                            shape.pose.pos.y = .0
+                            shape.pose.pos.z = .0
+                            if not o.has_shape():
+                                shape.color = self.__compute_dominant_color(rgb_image, o.bbox)
+                                shape.w = 0.60
+                                o.shapes.append(shape)
+                            else:
+                                o.shapes[0].w = 0.60
+                                o.shapes[0].h = shape.h
+            except Exception as e:
+                pass
 
     def __compute_dominant_color(self, rgb_image, bbox):
         xmin = int(bbox.xmin)
@@ -43,6 +47,7 @@ class ShapeEstimator(object):
         h = int(bbox.height())
         w = int(bbox.width())
         cropped_image = rgb_image[ymin:ymin+h, xmin:xmin+w].copy()
+        cropped_image = cv2.resize(cropped_image, (68, 68))
         np_pixels = cropped_image.shape[0] * cropped_image.shape[1]
         cropped_image = cropped_image.reshape((np_pixels, 3))
         clt = KMeans(n_clusters=K)

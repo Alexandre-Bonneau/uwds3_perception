@@ -38,8 +38,8 @@ class AppearanceFeaturesExtractor(object):
         """
         """
         if track is not None:
-            x = track.bbox.center().x
-            y = track.bbox.center().y
+            x = track.bbox.xmin
+            y = track.bbox.ymin
             w = track.bbox.width()
             h = track.bbox.height()
             crop_image = rgb_image[y:y+h, x:x+w]

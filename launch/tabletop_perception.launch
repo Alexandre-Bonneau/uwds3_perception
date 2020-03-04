@@ -27,7 +27,7 @@
 
   <!-- Tracker parameters -->
   <arg name="n_init" default="4"/>
-  <arg name="n_frame" default="2"/>
+  <arg name="n_frame" default="3"/>
   <arg name="max_iou_distance" default="0.98"/>
   <arg name="max_color_distance" default="0.3"/>
   <arg name="max_face_distance" default="0.3"/>
@@ -41,7 +41,7 @@
   <arg name="use_depth" default="false"/>
 
 
-  <node name="uwds3_perception" pkg="uwds3_perception" type="uwds3_perception_node.py" args="" output="screen" respawn="false">
+  <node name="tabletop_perception" pkg="uwds3_perception" type="tabletop_perception_node.py" args="" output="screen" respawn="false">
     <rosparam subst_value="true">
       rgb_image_topic: $(arg rgb_image_topic)
       rgb_camera_info_topic: $(arg rgb_camera_info_topic)

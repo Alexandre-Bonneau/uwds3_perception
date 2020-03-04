@@ -9,7 +9,9 @@ from .track import Track
 
 def iou_cost(detection, track):
     """Returns the iou cost"""
-    return abs(1 - iou(detection.bbox, track.bbox))
+    iou_cost = 1 - max(0, iou(detection.bbox, track.bbox))
+    #print iou_cost
+    return iou_cost
 
 
 def overlap_cost(detection, track):
@@ -43,13 +45,15 @@ class MultiObjectTracker(object):
                  max_distance_feat,
                  n_init,
                  max_disappeared,
-                 max_age):
+                 max_age,
+                 use_appearance_tracker=True):
 
         self.n_init = n_init
         self.max_disappeared = max_disappeared
         self.max_age = max_age
         self.features_metric = features_metric
         self.max_distance_feat = max_distance_feat
+        self.use_appearance_tracker = use_appearance_tracker
         self.tracks = []
         self.geometric_assignment = LinearAssignment(geometric_metric, max_distance=max_distance_geom)
         self.features_assignment = LinearAssignment(features_metric, max_distance=max_distance_feat)
@@ -74,19 +78,24 @@ class MultiObjectTracker(object):
 
             for detection_indice, track_indice in matches:
                 self.tracks[track_indice].update(detections[detection_indice])
-                self.tracks[track_indice].tracker.update(rgb_image, detections[detection_indice])
+                if self.use_appearance_tracker is True:
+                    self.tracks[track_indice].tracker.update(rgb_image, detections[detection_indice])
         else:
             remaining_tracks = np.arange(len(self.tracks))
             remaining_detections = []
 
         for track_indice in remaining_tracks:
-            if self.tracks[track_indice].is_confirmed() or self.tracks[track_indice].is_occluded():
-                success, detection = self.tracks[track_indice].tracker.predict(rgb_image)
-                if success is True:
-                    self.tracks[track_indice].update(detection)
+            if self.use_appearance_tracker is True:
+                if self.tracks[track_indice].is_confirmed() or self.tracks[track_indice].is_occluded():
+                    success, detection = self.tracks[track_indice].tracker.predict(rgb_image)
+                    if success is True:
+                        self.tracks[track_indice].update(detection)
+                        self.tracks[track_indice].mark_missed()
+                    else:
+                        if self.tracks[track_indice].is_confirmed():
+                            self.tracks[track_indice].predict_bbox()
+                        self.tracks[track_indice].mark_missed()
                 else:
-                    if self.tracks[track_indice].is_confirmed():
-                        self.tracks[track_indice].predict_bbox()
                     self.tracks[track_indice].mark_missed()
             else:
                 self.tracks[track_indice].mark_missed()
@@ -105,5 +114,6 @@ class MultiObjectTracker(object):
                                  self.max_disappeared,
                                  self.max_age))
         track_indice = len(self.tracks)-1
-        self.tracks[track_indice].tracker.update(rgb_image, self.tracks[track_indice])
+        if self.use_appearance_tracker is True:
+            self.tracks[track_indice].tracker.update(rgb_image, self.tracks[track_indice])
         return len(self.tracks)-1

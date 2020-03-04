@@ -1,8 +1,6 @@
 import cv2
 import numpy as np
-from pyuwds3.bbox_metrics import iou
 from pyuwds3.types.detection import Detection
-from scipy.spatial.distance import cosine
 
 
 class SingleObjectTracker(object):
@@ -14,6 +12,7 @@ class SingleObjectTracker(object):
 
     def update(self, rgb_image, object):
         """ """
+        self.age = 0
         self.medianflow_tracker = cv2.TrackerMedianFlow_create()
         self.object_label = object.label
         xmin = object.bbox.xmin
