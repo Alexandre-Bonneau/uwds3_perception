@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from pyuwds3.types.features import Features
 from .face_frontalizer_estimator import FaceFrontalizerEstimator
-
+from uwds3_perception.estimation.face_alignement_estimator import FaceAlignementEstimator
 
 class FacialFeaturesEstimator(object):
     """Represents the facial description estimator"""
@@ -10,9 +10,11 @@ class FacialFeaturesEstimator(object):
         """FacialFeaturesEstimator constructor"""
         self.name = "facial_description"
         self.dimensions = (128, 0)
+        self.face_alignement_estimator = FaceAlignementEstimator()
         self.model = cv2.dnn.readNetFromTorch(embedding_model_filename)
         if frontalize is True:
-            self.frontalizer = FaceFrontalizerEstimator(face_3d_model_filename)
+            ref_filename = "../../../data/face_frontalizer/ref3d.pkl"
+            self.frontalizer = FaceFrontalizerEstimator(ref_filename)
         else:
             self.frontalizer = None
 
@@ -26,10 +28,14 @@ class FacialFeaturesEstimator(object):
                 w = int(f.bbox.width())
                 h = int(f.bbox.height())
                 if w > 27 and h > 27:
-                    cropped_imgs.append(rgb_image[ymin:ymin+h, xmin:xmin+w])
+                    cropped_imgs.append(self.face_alignement_estimator.align(rgb_image,f))
+
                     if self.frontalizer is not None:
-                        frontalized_img = self.frontalizer.estimate(rgb_image, f, camera_matrix, dist_coeffs)
-                        cropped_imgs.append(np.round(frontalized_img).astype(np.uint8))
+                        bool,_,frontalized_img= self.frontalizer.estimate(rgb_image,f)
+                        if bool:
+                            cropped_imgs.append(frontalized_img)
+                        else:
+                            assert(False), "Error in Frontaliser"
         if len(cropped_imgs) > 0:
             blob = cv2.dnn.blobFromImages(cropped_imgs,
                                           1.0 / 255,
