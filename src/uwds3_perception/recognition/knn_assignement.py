@@ -4,8 +4,9 @@
 import math
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
-import pickle
 
+import pickle
+from collections import Counter
 class KNearestNeighborsAssignement(object):
     """   """
 
@@ -56,14 +57,37 @@ class KNearestNeighborsAssignement(object):
     def predict(self, feature):
         """
         """
-        distances, matchs = self.model.kneighbors([feature])
+        distances, matchs = self.model.kneighbors([feature],1)
         distance = distances[0]
         if distance > self.max_distance:
             return False, "unknown", 0.0
         indice = matchs[0][0]
         label = self.Y[indice]
         return True, label, distance
+    def multi_predict(self, feature,number = 12):
+        """
+        """
 
+        distancess, matchs = self.model.kneighbors([feature],number)
+        distances = distancess[0]
+
+        indices = matchs[0]
+        dist_count = {}
+        for i in indices:
+            dist_count[self.Y[i]]=0
+        for i in range(len(indices)):
+            dist_count[self.Y[indices[i]]]+=1-distances[i]
+        label = max(dist_count,key=dist_count.get)
+        distance = 1-(dist_count[label]/len(indices) )
+        if distance > self.max_distance:
+            return False, "unknown", 0.0
+        # if(label != self.Y[indices[0]]):
+        #     print(label)
+        #     for i in indices:
+        #         print(self.Y[i])
+        #     print(distances)
+        #     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        return True, label, distance
     def __del__(self):
         """
         """
@@ -71,7 +95,7 @@ class KNearestNeighborsAssignement(object):
         # TODO: save data
     def save(self,file):
         file = open(file,'w')
-        pickle.dump(self.knn,file)
+        pickle.dump(self,file)
         file.close()
     def load(self,file):
         file = open(file,'r')

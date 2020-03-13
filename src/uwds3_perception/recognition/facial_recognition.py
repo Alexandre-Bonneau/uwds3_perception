@@ -5,17 +5,13 @@ import matplotlib.pyplot as plt
 from scipy.spatial.distance import euclidean
 from uwds3_perception.detection.opencv_dnn_detector import OpenCVDNNDetector
 from uwds3_perception.estimation.facial_features_estimator import FacialFeaturesEstimator
-<<<<<<< HEAD
 from uwds3_perception.estimation.face_alignement_estimator import FaceAlignementEstimator
 from uwds3_perception.estimation.facial_landmarks_estimator import FacialLandmarksEstimator
-
-
 from uwds3_perception.detection.face_detector import FaceDetector
-=======
->>>>>>> 51d96c820bc262865351d2d94026e895c018d71e
 from uwds3_perception.recognition.knn_assignement import KNearestNeighborsAssignement
 from uwds3_perception.recognition.knn_assignement import KNNLoader
 import numpy.random as rng
+from sklearn.utils import shuffle
 
 
 class FacialRecognition(object):
@@ -32,6 +28,9 @@ class OpenFaceRecognition(object):
                  detector_model_filename,
                  detector_weights_filename,
                  detector_config_filename,
+                 face_3d_model_filename,
+                 embedding_model_file,
+                 shape_predictor_config_filename,
                  frontalize=False,
                  metric_distance=euclidean):
         self.face_detector = OpenCVDNNDetector(detector_model_filename,
@@ -40,9 +39,9 @@ class OpenFaceRecognition(object):
                                                300)
 
         self.detector_model_filename = detector_model_filename
-        self.a= FacialLandmarksEstimator(shape_predictor_config_filename)
+        self.facial_landmarks_estimator= FacialLandmarksEstimator(shape_predictor_config_filename)
         self.face_alignement_estimator = FaceAlignementEstimator()
-        self.facial_features_estimator = FacialFeaturesEstimator( face_3d_model_filename,embedding_model_file)
+        self.facial_features_estimator = FacialFeaturesEstimator( face_3d_model_filename,embedding_model_file,frontalize)
         #self.input_shape = input_shape
         self.detector_weights_filename = detector_weights_filename
         self.frontalize = frontalize
@@ -52,17 +51,19 @@ class OpenFaceRecognition(object):
         face_list = self.face_detector.detect(rgb_image)
         if len(face_list) == 0:
             print("no image found for extraction")
-            return []
+            return None
         else:
-            cv2.imshow('image',rgb_image)
-            cv2.waitKey(0)
+            # cv2.imshow('image',rgb_image)
+            # cv2.waitKey(0)
+
+            self.facial_landmarks_estimator.estimate(rgb_image,face_list)
             self.facial_features_estimator.estimate(rgb_image,face_list,self.frontalize)
             name = self.facial_features_estimator.name
-            self.a.estimate(rgb_image,face_list)
-            rgb_image2 = self.face_alignement_estimator.align(rgb_image,face_list[0])
-            cv2.imshow('image',rgb_image2)
 
-            cv2.waitKey(0)
+            # rgb_image2 = self.face_alignement_estimator.align(rgb_image,face_list[0])
+            # cv2.imshow('image',rgb_image2)
+
+            # cv2.waitKey(0)
             return face_list[0].features[name]
 
     def predict(self, rgb_image_1, rgb_image_2):
@@ -70,6 +71,7 @@ class OpenFaceRecognition(object):
         feature2 = self.extract(rgb_image_2)
         return(1 - self.metric_distance(feature1.to_array(),
                                         feature2.to_array()))
+
 
 
 class FacialRecognitionDataLoader(object):
@@ -82,6 +84,7 @@ class FacialRecognitionDataLoader(object):
         print("{}\r\n".format(self.train_classes.keys()))
         print("Validation categories ({} different from training):".format(len(self.val_classes.keys())))
         print("{}\r\n".format(self.val_classes.keys()))
+        self.nb_of_undetection = 0
 
     def load_dataset(self, data_directory_path, n=0):
         X_data = []
@@ -98,6 +101,9 @@ class FacialRecognitionDataLoader(object):
                 image = cv2.imread(image_path)
                 rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 individual_images.append(rgb_image)
+                Y_data.append(n)
+                rgb_image_flip = cv2.flip(rgb_image,1)
+                individual_images.append(rgb_image_flip)
                 Y_data.append(n)
             try:
                 X_data.append(np.stack(individual_images))
@@ -185,8 +191,13 @@ class FacialRecognitionDataLoader(object):
         Y = self.Y_train
         persons_list = self.train_classes
         for (image, person_id) in zip(X, Y):
-            image_feature = model.extract(image).to_array()
-            self.knn.update(image_feature, persons_list[person_id[0]])
+            image_feature = model.extract(image)
+            if image_feature is not None:
+                self.knn.update(image_feature.to_array(), persons_list[person_id[0]])
+            else:
+                self.nb_of_undetection+=1
+        if self.nb_of_undetection > 0:
+            print(str(self.nb_of_undetection)+" images where not taken into account : no faces found")
 
     def knn_train(self):
         self.knn.train()
@@ -200,7 +211,7 @@ class FacialRecognitionDataLoader(object):
         count = 0
         for (image, person_id) in zip(X, Y):
             image_feature = model.extract(image).to_array()
-            bool, value, distance = self.knn.predict(image_feature)
+            bool, value, distance = self.knn.multi_predict(image_feature)
             if value == persons_list[person_id[0]]:
                 count +=1
         accuracy = count / (1.0 * len(X))
@@ -208,7 +219,19 @@ class FacialRecognitionDataLoader(object):
         return accuracy
 
 
+class Create_network(object):
+    def __init__(self, faces_location):
+        self.frdl = FacialRecognitionDataLoader(faces_location,faces_location)
+        self.frdl.load_dataset(faces_location)
+        self.ofd = OpenFaceRecognition(detector_model, detector_model_txt,
+        detector_config_filename,face_3d_model_filename,embedding_model_file,shape_predictor_config_filename,
+        frontalize = False)
 
+    def create(self, name):
+        self.frdl.knn_init("visage",0.9)
+        self.frdl.knn_update(self.ofd)
+        self.frdl.knn_train()
+        self.frdl.knn.save(name)
 
 if __name__ == '__main__':
     detector_model = "../../../models/detection/opencv_face_detector_uint8.pb"
@@ -218,21 +241,6 @@ if __name__ == '__main__':
     detector_config_filename = "../../../config/detection/face_config.yaml"
     face_3d_model_filename = "../../../config/estimation/face_3d_model.npy"
     shape_predictor_config_filename= "../../../models/estimation/shape_predictor_68_face_landmarks.dat"
-else:
-    detector_config_filename = "../config/detection/face_config.yaml"
-    face_3d_model_filename = "../config/estimation/face_3d_model.npy"
-    embedding_model_file = "../models/features/nn4.small2.v1.t7"
-
-
-#
-frdl = FacialRecognitionDataLoader("../../../src/uwds3_perception/recognition/snapshots_origin",
- "../../../src/uwds3_perception/recognition/snapshots_origin")
-frdl.load_dataset("../../../src/uwds3_perception/recognition/snapshots_origin/")
-ofd = OpenFaceRecognition(detector_model, detector_model_txt,detector_config_filename)
-
-frdl.test_recognition(ofd,4,50)
-frdl.evaluate(ofd,7)
-# frdl.knn_init("visage",0.99)
-# frdl.knn_update(ofd)
-# frdl.knn_train()
-# frdl.knn_validation(ofd)
+    faces_location = "../../../data/face_recognition/snapshots_2faces"
+    cn = Create_network(faces_location)
+    cn.create("Test2faces")
